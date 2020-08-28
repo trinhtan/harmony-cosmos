@@ -1,90 +1,48 @@
+const { Harmony } = require('@harmony-js/core');
+const { ChainID, ChainType } = require('@harmony-js/utils');
+const GAS_LIMIT = 6721900;
+const GAS_PRICE = 1000000000;
+
+const options = {
+  gasLimit: GAS_LIMIT,
+  gasPrice: GAS_PRICE
+};
+
+const hmy = new Harmony(process.env.TESTNET_0_URL, {
+  chainID: ChainID.HmyTestnet,
+  chainType: ChainType.Harmony
+});
+
+const tokenContractJson = require('../build/contracts/BridgeToken.json');
+const tokenContractAddress = tokenContractJson.networks['2'].address;
+const TOKEN_AMOUNT = (1).toString().padEnd(20, '0');
+
 module.exports = async () => {
-  /*******************************************
-   *** Set up
-   ******************************************/
-  const Web3 = require("web3");
-  const HDWalletProvider = require("@truffle/hdwallet-provider");
-
-  // Contract abstraction
-  const truffleContract = require("truffle-contract");
-
-  const tokenContract = truffleContract(
-    require("../build/contracts/BridgeToken.json")
-  );
-
-  /*******************************************
-   *** Constants
-   ******************************************/
-  // Config values
-  const NETWORK_ROPSTEN =
-    process.argv[4] === "--network" && process.argv[5] === "ropsten";
-  const NUM_ARGS = process.argv.length - 4;
-
-  // Mint transaction parameters
-  const TOKEN_AMOUNT = (1).toString().padEnd(20, "0")
-    console.log({TOKEN_AMOUNT})
-  /*******************************************
-   *** Command line argument error checking
-   ***
-   *** truffle exec lacks support for dynamic command line arguments:
-   *** https://github.com/trufflesuite/truffle/issues/889#issuecomment-522581580
-   ******************************************/
-  // if (NETWORK_ROPSTEN) {
-  //   return console.error(
-  //     "Error: token minting on Ropsten network is not supported at this time"
-  //   );
-  // } else {
-  //   if (NUM_ARGS !== 0) {
-  //     return console.error(
-  //       "Error: custom parameters for token minting are not supported at this time."
-  //     );
-  //   }
-  // }
-
-  /*******************************************
-   *** Web3 provider
-   ******************************************/
-  let provider;
-  if (NETWORK_ROPSTEN) {
-    provider = new HDWalletProvider(
-      process.env.MNEMONIC,
-      "https://ropsten.infura.io/v3/".concat(process.env.INFURA_PROJECT_ID)
-    );
-  } else {
-    provider = new Web3.providers.HttpProvider(process.env.LOCAL_PROVIDER);
-  }
-  // const provider = new Web3.providers.HttpProvider(process.env.LOCAL_PROVIDER);
-  const web3 = new Web3(provider);
-  tokenContract.setProvider(web3.currentProvider);
   try {
-  /*******************************************
-   *** Contract interaction
-   ******************************************/
-  // Get current accounts
-  const accounts = await web3.eth.getAccounts();
+    // Send mint transaction
+    const tokenContract = hmy.contracts.createContract(tokenContractJson.abi, tokenContractAddress);
+    tokenContract.wallet.addByPrivateKey(process.env.OPERATOR_PRIVATE_KEY);
 
-  // Send mint transaction
-  const { logs } = await tokenContract.deployed().then(function(instance) {
-    return instance.mint(accounts[0], TOKEN_AMOUNT, {
-      from: accounts[0],
-      value: 0,
-      gas: 300000 // 300,000 Gwei
+    const txnMint = hmy.transactions.newTx({
+      to: tokenContractAddress
     });
-  });
 
-  // Get event logs
-  const event = logs.find(e => e.event === "Transfer");
+    await tokenContract.wallet.signTransaction(txnMint);
 
-  // Parse event fields
-  const transferEvent = {
-    from: event.args.from,
-    to: event.args.to,
-    value: Number(event.args.value)
-  };
+    await tokenContract.methods
+      .mint(process.env.OPERATOR_ADDRESS, TOKEN_AMOUNT)
+      .send(options)
+      .then(result => {
+        // console.log(result);
+        console.log('Mint token successfully!');
+      })
+      .catch(error => {
+        console.log('Mint token error', error);
+      });
 
-  console.log(transferEvent);
-} catch (error) {
-  console.error({error})
-}
-  return;
+    process.exit();
+  } catch (error) {
+    console.error({ error });
+    process.exit();
+  }
 };

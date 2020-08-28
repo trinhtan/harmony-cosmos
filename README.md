@@ -1,7 +1,5 @@
-### 1. Deploy
+### 1. Deploy on Harmony testnet
 
 ```bash
-cd testnet-contracts
-truffle compile
-truffle migrate --network testnet reset
+yarn peggy:all
 ```

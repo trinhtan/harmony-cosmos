@@ -36,7 +36,7 @@
   },
   "scripts": {
     "develop": "ganache-cli -i 5777 -p 7545 -m 'candy maple cake sugar pudding cream honey rich smooth crumble sweet treat'",
-    "migrate": "npx truffle migrate --reset",
+    "migrate": "npx truffle migrate --network testnet reset",
     "peggy:abi": "node scripts/formatAbi.js",
     "peggy:address": "npx truffle exec scripts/getBridgeRegistryAddress.js",
     "peggy:validators": "npx truffle exec scripts/getValidators.js",
