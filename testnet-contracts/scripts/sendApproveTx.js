@@ -1,140 +1,48 @@
+const { Harmony } = require('@harmony-js/core');
+const { ChainID, ChainType } = require('@harmony-js/utils');
+const GAS_LIMIT = 6721900;
+const GAS_PRICE = 1000000000;
+
+const options = {
+  gasLimit: GAS_LIMIT,
+  gasPrice: GAS_PRICE
+};
+
+const hmy = new Harmony(process.env.TESTNET_0_URL, {
+  chainID: ChainID.HmyTestnet,
+  chainType: ChainType.Harmony
+});
+const bridgeContractJson = require('../build/contracts/BridgeBank.json');
+const tokenContractJson = require('../build/contracts/BridgeToken.json');
+const tokenAmount = 1000000000000000000n;
+const tokenContractAddress = tokenContractJson.networks['2'].address;
+const bridgeContractAddress = bridgeContractJson.networks['2'].address;
+
 module.exports = async () => {
-  /*******************************************
-   *** Set up
-   ******************************************/
-  const Web3 = require("web3");
-  const HDWalletProvider = require("@truffle/hdwallet-provider");
-
-  // Contract abstraction
-  const truffleContract = require("truffle-contract");
-  const bridgeContract = truffleContract(
-    require("../build/contracts/BridgeBank.json")
-  );
-  const tokenContract = truffleContract(
-    require("../build/contracts/BridgeToken.json")
-  );
-
-  /*******************************************
-   *** Constants
-   ******************************************/
-  // Config values
-  const NETWORK_ROPSTEN =
-    process.argv[4] === "--network" && process.argv[5] === "ropsten";
-  const DEFAULT_PARAMS =
-    process.argv[4] === "--default" ||
-    (NETWORK_ROPSTEN && process.argv[6] === "--default");
-  const NUM_ARGS = process.argv.length - 4;
-
-  // Default transaction parameters
-  const DEFAULT_TOKEN_AMOUNT = 100;
-
-  /*******************************************
-   *** Command line argument error checking
-   ***
-   *** truffle exec lacks support for dynamic command line arguments:
-   *** https://github.com/trufflesuite/truffle/issues/889#issuecomment-522581580
-   ******************************************/
-  if (NETWORK_ROPSTEN) {
-    if (NUM_ARGS !== 3 && NUM_ARGS !== 4) {
-      return console.error(
-        "Error: Must specify token amount if using the Ropsten network."
-      );
-    }
-  } else {
-    if (NUM_ARGS !== 1) {
-      return console.error("Error: Must specify token amount or --default.");
-    }
-  }
-
-  /*******************************************
-   *** Approve transaction parameters
-   ******************************************/
-  let tokenAmount;
-
-  if (NETWORK_ROPSTEN) {
-    tokenAmount = process.argv[6];
-  } else {
-    if (!DEFAULT_PARAMS) {
-      tokenAmount = process.argv[4];
-    } else {
-      tokenAmount = DEFAULT_TOKEN_AMOUNT;
-    }
-  }
-
-
-  /*******************************************
-   *** Approve transaction parameters
-   ******************************************/
-  let tokenAddress;
-
-  if (NETWORK_ROPSTEN) {
-    tokenAddress = process.argv[7];
-  } else {
-    if (!DEFAULT_PARAMS) {
-      tokenAddress = process.argv[5];
-    } else {
-      tokenAddress = false;
-    }
-  }
-
-  /*******************************************
-   *** Web3 provider
-   *** Set contract provider based on --network flag
-   ******************************************/
-  let provider;
-  if (NETWORK_ROPSTEN) {
-    provider = new HDWalletProvider(
-      process.env.MNEMONIC,
-      "https://ropsten.infura.io/v3/".concat(process.env.INFURA_PROJECT_ID)
-    );
-  } else {
-    provider = new Web3.providers.HttpProvider(process.env.LOCAL_PROVIDER);
-  }
-
-  const web3 = new Web3(provider);
-
-  bridgeContract.setProvider(web3.currentProvider);
-  tokenContract.setProvider(web3.currentProvider);
   try {
-    /*******************************************
-     *** Contract interaction
-    ******************************************/
-    // Get current accounts
-    const accounts = await web3.eth.getAccounts();
+    const tokenContract = hmy.contracts.createContract(tokenContractJson.abi, tokenContractAddress);
+    tokenContract.wallet.addByPrivateKey(process.env.OPERATOR_PRIVATE_KEY);
 
-    const bridgeContractAddress = await bridgeContract
-      .deployed()
-      .then(function(instance) {
-        return instance.address;
-      });
-    
-    let instance
-    if (tokenAddress) {
-      instance = await tokenContract.at(tokenAddress)
-    } else {
-      instance = await tokenContract.deployed()
-    }
-
-    // Send lock transaction
-    const { logs } = await instance.approve(bridgeContractAddress, tokenAmount, {
-      from: accounts[0],
-      value: 0,
-      gas: 300000 // 300,000 Gwei
+    const txnApprove = hmy.transactions.newTx({
+      to: tokenContractAddress
     });
 
-    // Get event logs
-    const event = logs.find(e => e.event === "Approval");
+    await tokenContract.wallet.signTransaction(txnApprove);
 
-    // Parse event fields
-    const approvalEvent = {
-      owner: event.args.owner,
-      spender: event.args.spender,
-      value: Number(event.args.value)
-    };
+    await tokenContract.methods
+      .approve(bridgeContractAddress, tokenAmount)
+      .send(options)
+      .then(result => {
+        // console.log(result);
+        console.log('Approve successfully!');
+      })
+      .catch(error => {
+        console.log('Approve token error', error);
+      });
 
-    console.log(approvalEvent);
+    process.exit();
   } catch (error) {
-    console.error({error})
+    console.error({ error });
+    process.exit();
   }
-  return;
 };
